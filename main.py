@@ -215,6 +215,8 @@ def main():
             student_id = re.search(r'glo_student_id" value="(.*?)"', content, re.S).group(1)
             all_Type = re.search(r'glo_allType" value="(.*?)"', content, re.S).group(1)
             course_url = re.search(r'course_url" value="(.*?)"', content, re.S).group(1)
+            class_code = re.search(r'class_code" value="(.*?)"', content, re.S).group(1)
+            center_code = re.search(r'center_code" value="(.*?)"', content, re.S).group(1)
             questions_data = parse_questions(content)
             print(questions_data)
             # 获取验证码
@@ -255,32 +257,6 @@ def main():
                 headers=headers_cx)
             answers_data = parse_answer(response.text)
             result = match(questions_data, answers_data)
-
-            # 做试题
-            response = requests.get(
-                'http://cs.xnjd.cn/course/exercise/Student_doIt.action?'
-                'courseId=' + courseID +
-                '&homeworkId=' + homeworkID,
-                headers=headers_cx)
-            content = response.text
-            all_ex = re.search(r'allExerciseId" value=(.*?)>', content, re.S).group(1)
-            student_id = re.search(r'glo_student_id" value="(.*?)"', content, re.S).group(1)
-            all_Type = re.search(r'glo_allType" value="(.*?)"', content, re.S).group(1)
-            class_code = re.search(r'class_code" value="(.*?)"', content, re.S).group(1)
-            center_code = re.search(r'center_code" value="(.*?)"', content, re.S).group(1)
-            course_url = re.search(r'course_url" value="(.*?)"', content, re.S).group(1)
-            # 获取验证码
-            response = requests.get(
-                'http://cs.xnjd.cn/course/exercise/Student_validationCode.action?courseId=' + courseID,
-                headers=headers_cx, stream=True)
-            with open('demo.jpg', 'wb') as fd:
-                for chunk in response.iter_content(128):
-                    fd.write(chunk)
-            cv.namedWindow('image')
-            cv.imshow('image', cv.imread('demo.jpg'))
-            cv.waitKey(0)
-            cv.destroyAllWindows()
-            code = input("请输入验证码:")
             save_post_data = {
                 'method': 'savetmpontime',
                 'all_ex': all_ex,
@@ -301,6 +277,7 @@ def main():
                 save_post_data[r] = result
             print(save_post_data)
             # 提交数据
+            # 保存临时答案
             response = requests.post('http://cs.xnjd.cn/course/exercise/Ajax_stusavetmp.action', data=save_post_data,
                                      headers=headers_cx)
             print(response.text)
