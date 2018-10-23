@@ -6,7 +6,7 @@
 ## 前置库需要
 - requests 网络请求
 - PyQuery dom解析
-- openCV 显示验证码
+- opencv-python 显示验证码
 
 ## 使用注意
 请使用py3版本  

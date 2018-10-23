@@ -11,10 +11,9 @@ def parse_questions(data):
     j = pyquery.PyQuery(data)
     question_types = []
     for d in j('form[name="form1"] > table > tr > td > table > tr > td > table[cellpadding="0"]').items():
-        tmp = re.findall(r'、(.*?)\(.*?共(.*?)道', d.text(), re.S)[0]
+        tmp = re.findall(r'、(.*?)\(.*?共.*?([0-9]+).*?道', d.text(), re.S)[0]
         question_types.append({'name': tmp[0], 'num': tmp[1], 'src': d, 'questions': []})
     for question_type in question_types:
-        print(question_type)
         if question_type['name'] == '单项选择题':
             for q_src in question_type['src'].find('table').items():
                 id = re.findall(r'name="answer_(.*?)"', q_src.html())[0]
@@ -24,11 +23,14 @@ def parse_questions(data):
                     if n == 0:
                         q['q'] = re.findall(r'\.(.*)', t.text())
                     else:
-                        content = str(t.html()).replace('&#13;', '').replace('\xa0', '')
-                        if re.search(r'\(.*?\) (.*)', str(t.text()).replace('\xa0', ' '), re.S):
-                            q['a'].append({'v': re.search(r'value="(.*?)"', content, re.S).group(1),
-                                           'k': re.search(r'\(.*?\) (.*)', str(t.text()).replace('\xa0', ' '),
-                                                          re.S).group(1)})
+                        print(t.text())
+                        print('-----')
+                        text = t.text().replace('\n', ' ')
+                        print(text)
+                        print('-----')
+                        if re.search(r'\(.*?\) (.*)', t.text(), re.S):
+                            q['a'].append({'v': re.search(r'value="(.*?)"', t.html(), re.S).group(1),
+                                           'k': re.search(r'\(.*?\) (.*)', text).group(1)})
                         else:
                             q['a'].append({'v': ' ',
                                            'k': ' '})
@@ -50,27 +52,25 @@ def parse_questions(data):
                     if n == 0:
                         q['q'] = re.findall(r'\.(.*)', t.text())[0]
                     else:
-                        content = str(t.html()).replace('&#13;', '').replace('\xa0', '')
-                        q['a'].append({'v': re.search(r'value="answer_.*?_(.*?)"', content, re.S).group(1),
-                                       'k': re.search(r'\(.*?\) (.*)', str(t.text()).replace('\xa0', ' '), re.S).group(
-                                           1)})
+                        q['a'].append({'v': re.search(r'value="answer_.*?_(.*?)"', t.html(), re.S).group(1),
+                                       'k': re.search(r'\(.*?\) (.*)', t.text()).group(1)})
                     n = n + 1
                 question_type['questions'].append(q)
         elif question_type['name'] == '阅读理解、完形填空题':
             q_t = None
             for q_src in question_type['src'].find('table').items():
                 for a_src in q_src.find("tr").items():
-                    content = str(a_src.html()).replace('\xa0', '')
-                    tmp = re.search(r'answer_(.*?)".*?value="(.*?)".*?>\(.*?\)(.*?)[\n\t]', content, re.S)
-                    if tmp:
-                        id = tmp.group(1)
-                        if q_t is None:
-                            q_t = {'id': id, 'o': []}
-                            question_type['questions'].append(q_t)
-                        if q_t['id'] != id:
-                            q_t = {'id': id, 'o': []}
-                            question_type['questions'].append(q_t)
-                        q_t['o'].append({'v': tmp.group(2), 'k': tmp.group(3)})
+                    if a_src.html():
+                        tmp = re.search(r'answer_(.*?)".*?value="(.*?)".*?>\(.*?\)(.*?)[\n\t]', a_src.html(), re.S)
+                        if tmp:
+                            id = tmp.group(1)
+                            if q_t is None:
+                                q_t = {'id': id, 'o': []}
+                                question_type['questions'].append(q_t)
+                            if q_t['id'] != id:
+                                q_t = {'id': id, 'o': []}
+                                question_type['questions'].append(q_t)
+                            q_t['o'].append({'v': tmp.group(2), 'k': tmp.group(3)})
     return question_types
 
 
@@ -142,6 +142,10 @@ def main():
         "Connection": "keep-alive",
         "Cache-Control": "max-age=0"
     }
+
+    first_load = True
+    first_code = ''
+
     response = requests.get("http://auth.xnjd.cn/login", headers=headers_auth)
     if response.status_code == 404:
         print('网站维护中...')
@@ -153,8 +157,8 @@ def main():
     execution = re.search(r'name="execution" value="(.*?)"', content).group(1)
     eventId = re.search(r'name="_eventId" value="(.*?)"', content).group(1)
 
-    username = input("请输入账号:")
-    password = input("请输入密码:")
+    username = ''
+    password = ''
 
     post_data = {
         "username": username,
@@ -217,20 +221,25 @@ def main():
             course_url = re.search(r'course_url" value="(.*?)"', content, re.S).group(1)
             class_code = re.search(r'class_code" value="(.*?)"', content, re.S).group(1)
             center_code = re.search(r'center_code" value="(.*?)"', content, re.S).group(1)
+            content = content.replace("&nbsp;", " ").replace("\r", "")
+            print(content)
             questions_data = parse_questions(content)
             print(questions_data)
             # 获取验证码
-            response = requests.get(
-                'http://cs.xnjd.cn/course/exercise/Student_validationCode.action?courseId=' + courseID,
-                headers=headers_cx, stream=True)
-            with open('demo.jpg', 'wb') as fd:
-                for chunk in response.iter_content(128):
-                    fd.write(chunk)
-            cv.namedWindow('image')
-            cv.imshow('image', cv.imread('demo.jpg'))
-            cv.waitKey(0)
-            cv.destroyAllWindows()
-            code = input("请输入验证码:")
+            if first_load:
+                response = requests.get(
+                    'http://cs.xnjd.cn/course/exercise/Student_validationCode.action?courseId=' + courseID,
+                    headers=headers_cx, stream=True)
+                with open('demo.jpg', 'wb') as fd:
+                    for chunk in response.iter_content(128):
+                        fd.write(chunk)
+                cv.namedWindow('image')
+                cv.imshow('image', cv.imread('demo.jpg'))
+                cv.waitKey(0)
+                cv.destroyWindow('image')
+                # cv.destroyAllWindows()
+                first_code = input("请输入验证码:")
+                first_load = False
             post_data = {
                 'method': 'submithomework',
                 'all_ex': all_ex,
@@ -241,7 +250,7 @@ def main():
                 'center_code': '',
                 'class_code': '',
                 'course_url': course_url,
-                'qulifyCode': code,
+                'qulifyCode': first_code,
                 'timestamp': 'Wed Oct 25 2017 15:32:14 GMT 0800 (中国标准时间)',
                 'lefttime': '|0',
                 'repeat_type': '2',
@@ -255,7 +264,7 @@ def main():
             response = requests.get(
                 'http://cs.xnjd.cn/course/exercise/Student_history.action?courseId=' + courseID + '&homeworkId=' + homeworkID,
                 headers=headers_cx)
-            answers_data = parse_answer(response.text)
+            answers_data = parse_answer(response.text.replace("&nbsp;", " ").replace("\r", ""))
             result = match(questions_data, answers_data)
             save_post_data = {
                 'method': 'savetmpontime',
@@ -291,7 +300,7 @@ def main():
                 'center_code': center_code,
                 'class_code': class_code,
                 'course_url': course_url,
-                'qulifyCode': code,
+                'qulifyCode': first_code,
                 'timestamp': 'Wed Oct 25 2017 15:32:14 GMT 0800 (中国标准时间)',
                 'lefttime': '0|0',
                 'repeat_type': '2',
